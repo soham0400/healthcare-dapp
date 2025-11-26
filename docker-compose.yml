@@ -1,0 +1,88 @@
+services:
+  ganache:
+    image: trufflesuite/ganache-cli
+    command: >
+      ganache-cli
+      --host 0.0.0.0
+      --port 8545
+      --networkId 1337
+      --chainId 1337
+      --mnemonic "test test test test test test test test test test test junk"
+      --db /data
+    volumes:
+      - ganache_data:/data
+    ports:
+      - "8545:8545"
+    networks:
+      - healthcare-net
+
+  truffle:
+    build:
+      context: .
+      dockerfile: ./truffle/Dockerfile
+    depends_on:
+      - ganache
+    volumes:
+      - ./build:/app/build
+      - ./healthcare-backend/contract:/app/healthcare-backend/contract
+      - ./healthcare-frontend/.env:/app/healthcare-frontend/.env
+      - ./healthcare-backend/.env:/app/healthcare-backend/.env
+    networks:
+      - healthcare-net
+    healthcheck:
+      test: ["CMD", "test", "-f", "/migration_done"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  mongodb:
+    image: mongo:6
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - healthcare-net
+
+  backend:
+    build:
+      context: ./healthcare-backend
+    depends_on:
+      truffle:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./healthcare-backend:/app
+      - /app/node_modules
+    networks:
+      - healthcare-net
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/healthcare
+      - GANACHE_URL=http://ganache:8545
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./healthcare-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./healthcare-frontend:/app
+      - /app/node_modules
+    networks:
+      - healthcare-net
+
+volumes:
+  ganache_data:
+  mongo_data:
+
+networks:
+  healthcare-net:
+    driver: bridge

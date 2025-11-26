@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DApp Frontend Tester</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Ethers.js V6 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .custom-scroll::-webkit-scrollbar { width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
+        <h1 class="text-xl font-bold text-indigo-600 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+            </svg>
+            DApp Tester
+        </h1>
+        <div class="flex gap-3 items-center">
+            <span id="networkName" class="text-sm text-gray-500 hidden bg-gray-100 px-2 py-1 rounded"></span>
+            <button id="connectBtn" onclick="connectWallet()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                Connect Wallet
+            </button>
+            <span id="walletAddress" class="hidden text-sm font-mono bg-gray-100 px-3 py-2 rounded-lg border border-gray-200 text-gray-700"></span>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Left Sidebar: Configuration -->
+        <aside class="w-1/3 max-w-md bg-white border-r border-gray-200 flex flex-col z-0">
+            <div class="p-6 flex-1 overflow-y-auto custom-scroll">
+                <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Configuration</h2>
+                
+                <!-- Contract Address Input -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Contract Address</label>
+                    <input type="text" id="contractAddress" placeholder="0x..." class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono text-sm">
+                </div>
+
+                <!-- ABI Input -->
+                <div class="mb-6 flex-1 flex flex-col">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-medium text-gray-700">Contract ABI</label>
+                        <span class="text-xs text-gray-400">Paste array [...]</span>
+                    </div>
+                    <textarea id="abiJson" placeholder='[ { "constant": true, "inputs": [], "name": "..." } ]' class="w-full h-64 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono text-xs"></textarea>
+                    <p class="text-xs text-gray-500 mt-2">Tip: Copy the <code>abi</code> array from your build/contracts/File.json</p>
+                </div>
+
+                <button onclick="loadContract()" class="w-full bg-gray-800 hover:bg-gray-900 text-white py-2 rounded-lg transition-colors font-medium">
+                    Load Contract
+                </button>
+            </div>
+        </aside>
+
+        <!-- Right Area: Interaction & Logs -->
+        <div class="flex-1 flex flex-col bg-gray-50 relative">
+            
+            <!-- Functions Grid -->
+            <div id="functionsContainer" class="flex-1 p-6 overflow-y-auto custom-scroll">
+                <div class="flex flex-col items-center justify-center h-full text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    <p class="text-lg">Connect Wallet & Load Contract to start testing</p>
+                </div>
+            </div>
+
+            <!-- Console / Log Area -->
+            <div class="h-1/3 bg-white border-t border-gray-200 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <div class="px-4 py-2 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-gray-600 uppercase">Transaction Console</h3>
+                    <button onclick="document.getElementById('logs').innerHTML=''" class="text-xs text-red-500 hover:text-red-700">Clear</button>
+                </div>
+                <div id="logs" class="flex-1 p-4 overflow-y-auto font-mono text-sm custom-scroll space-y-2">
+                    <div class="text-gray-400 italic">Logs will appear here...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Transaction Wait -->
+    <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl flex flex-col items-center">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div>
+            <h3 class="text-lg font-bold text-gray-800">Processing...</h3>
+            <p class="text-sm text-gray-500 mt-1">Waiting for blockchain confirmation</p>
+        </div>
+    </div>
+
+    <script>
+        let provider, signer, contract;
+        let contractABI = [];
+        let connectedAddress = null;
+
+        // --- 1. Connect Wallet ---
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = await provider.getSigner();
+                    connectedAddress = await signer.getAddress();
+                    
+                    // UI Update
+                    document.getElementById("connectBtn").classList.add("hidden");
+                    const walletSpan = document.getElementById("walletAddress");
+                    walletSpan.textContent = `${connectedAddress.slice(0,6)}...${connectedAddress.slice(-4)}`;
+                    walletSpan.classList.remove("hidden");
+                    walletSpan.classList.add("block");
+
+                    const network = await provider.getNetwork();
+                    const netSpan = document.getElementById("networkName");
+                    netSpan.innerText = `Chain ID: ${network.chainId}`;
+                    netSpan.classList.remove("hidden");
+
+                    log(`Connected to ${connectedAddress}`, "success");
+                } catch (error) {
+                    log("Connection failed: " + error.message, "error");
+                }
+            } else {
+                alert("Please install MetaMask!");
+            }
+        }
+
+        // --- 2. Load Contract & Generate UI ---
+        function loadContract() {
+            if (!signer) { alert("Please connect wallet first."); return; }
+
+            const address = document.getElementById("contractAddress").value;
+            const abiText = document.getElementById("abiJson").value;
+
+            if (!address || !abiText) { alert("Please provide Address and ABI."); return; }
+
+            try {
+                contractABI = JSON.parse(abiText);
+                // Handle truffle artifact format (if user pasted full json file instead of just abi)
+                if (contractABI.abi) {
+                    contractABI = contractABI.abi;
+                }
+
+                contract = new ethers.Contract(address, contractABI, signer);
+                renderFunctions(contractABI);
+                log("Contract loaded successfully!", "success");
+            } catch (e) {
+                log("Error loading contract: " + e.message, "error");
+            }
+        }
+
+        // --- 3. Render Function Cards ---
+        function renderFunctions(abi) {
+            const container = document.getElementById("functionsContainer");
+            container.innerHTML = "";
+            
+            // Sort: View functions first, then State-changing
+            const sortedAbi = abi
+                .filter(item => item.type === 'function')
+                .sort((a, b) => {
+                    const isReadA = (a.stateMutability === 'view' || a.stateMutability === 'pure');
+                    const isReadB = (b.stateMutability === 'view' || b.stateMutability === 'pure');
+                    return isReadA === isReadB ? 0 : isReadA ? -1 : 1;
+                });
+
+            const grid = document.createElement('div');
+            grid.className = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4";
+
+            sortedAbi.forEach((func, index) => {
+                const isRead = (func.stateMutability === 'view' || func.stateMutability === 'pure');
+                const isPayable = (func.stateMutability === 'payable');
+                const card = document.createElement('div');
+                
+                // Card Styling
+                card.className = `bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-shadow flex flex-col gap-3 ${isRead ? 'border-blue-100' : 'border-orange-100'}`;
+                
+                // Header
+                let badgeColor = isRead ? "bg-blue-100 text-blue-800" : "bg-orange-100 text-orange-800";
+                if(isPayable) badgeColor = "bg-red-100 text-red-800";
+                
+                const badgeText = isPayable ? "PAYABLE" : (isRead ? "READ" : "WRITE");
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <h3 class="font-bold text-gray-800 truncate" title="${func.name}">${func.name}</h3>
+                        <span class="text-xs font-bold px-2 py-1 rounded ${badgeColor}">${badgeText}</span>
+                    </div>
+                `;
+
+                // Inputs Container
+                const inputsContainer = document.createElement('div');
+                inputsContainer.className = "space-y-2";
+                
+                // Generate inputs for arguments
+                func.inputs.forEach((input, i) => {
+                    const inp = document.createElement('input');
+                    inp.type = "text";
+                    inp.placeholder = `${input.name || 'arg'} (${input.type})`;
+                    inp.id = `input-${func.name}-${index}-${i}`;
+                    inp.className = "w-full text-sm p-2 border border-gray-200 rounded focus:border-indigo-500 outline-none bg-gray-50";
+                    inputsContainer.appendChild(inp);
+                });
+
+                // Add Value input for Payable functions
+                if (isPayable) {
+                    const valInp = document.createElement('input');
+                    valInp.type = "text";
+                    valInp.placeholder = "ETH Value (e.g. 0.1)";
+                    valInp.id = `val-${func.name}-${index}`;
+                    valInp.className = "w-full text-sm p-2 border border-red-200 rounded focus:border-red-500 outline-none bg-red-50";
+                    inputsContainer.appendChild(valInp);
+                }
+
+                card.appendChild(inputsContainer);
+
+                // Action Button
+                const btn = document.createElement('button');
+                btn.innerText = isRead ? "Query" : "Transact";
+                btn.className = `w-full py-2 rounded text-sm font-medium transition-opacity ${isRead ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-orange-500 text-white hover:bg-orange-600'} mt-auto`;
+                
+                btn.onclick = () => executeFunction(func, index, isRead, isPayable);
+                card.appendChild(btn);
+
+                // Result Display
+                const resultDiv = document.createElement('div');
+                resultDiv.id = `result-${func.name}-${index}`;
+                resultDiv.className = "hidden text-xs bg-gray-900 text-green-400 p-2 rounded mt-2 break-all font-mono";
+                card.appendChild(resultDiv);
+
+                grid.appendChild(card);
+            });
+
+            container.appendChild(grid);
+        }
+
+        // --- 4. Execute Contract Function ---
+        async function executeFunction(func, index, isRead, isPayable) {
+            try {
+                // Gather Arguments
+                const args = [];
+                for (let i = 0; i < func.inputs.length; i++) {
+                    let val = document.getElementById(`input-${func.name}-${index}-${i}`).value;
+                    // Basic array parsing
+                    if(val.startsWith('[') && val.endsWith(']')) {
+                        val = JSON.parse(val);
+                    }
+                    args.push(val);
+                }
+
+                // Override options (for payable)
+                const options = {};
+                if (isPayable) {
+                    const ethVal = document.getElementById(`val-${func.name}-${index}`).value;
+                    if (ethVal) options.value = ethers.parseEther(ethVal);
+                }
+
+                log(`Calling ${func.name}...`, "info");
+
+                if (!isRead) document.getElementById('loadingModal').classList.remove('hidden');
+                document.getElementById('loadingModal').classList.add('flex');
+
+                let result;
+                if (isRead) {
+                    // READ call
+                    result = await contract[func.name](...args);
+                } else {
+                    // WRITE transaction
+                    const tx = await contract[func.name](...args, options);
+                    log(`Transaction sent: ${tx.hash}`, "info");
+                    result = await tx.wait();
+                }
+
+                // Display Result
+                const resDiv = document.getElementById(`result-${func.name}-${index}`);
+                resDiv.classList.remove("hidden");
+                
+                // Format output (handle BigInt)
+                const formattedResult = formatResult(result);
+                resDiv.innerText = formattedResult;
+                
+                log(`Success: ${func.name} returned/completed`, "success");
+                if(!isRead) log(`Full receipt in console`, "info");
+                console.log(result);
+
+            } catch (error) {
+                console.error(error);
+                log(`Error: ${error.reason || error.message}`, "error");
+            } finally {
+                document.getElementById('loadingModal').classList.add('hidden');
+                document.getElementById('loadingModal').classList.remove('flex');
+            }
+        }
+
+        // --- Helpers ---
+        function formatResult(res) {
+            if (res === null || res === undefined) return "null";
+            if (typeof res === 'object' && res.toString) {
+                return res.toString(); // Handles BigInt and Ethers objects often
+            }
+            return res;
+        }
+
+        function log(msg, type = "neutral") {
+            const logs = document.getElementById("logs");
+            const entry = document.createElement("div");
+            const time = new Date().toLocaleTimeString();
+            
+            let colorClass = "text-gray-700";
+            if (type === "error") colorClass = "text-red-600";
+            if (type === "success") colorClass = "text-green-600";
+            if (type === "info") colorClass = "text-blue-600";
+
+            entry.className = `${colorClass} border-b border-gray-100 pb-1 mb-1`;
+            entry.innerHTML = `<span class="text-gray-400 text-xs">[${time}]</span> ${msg}`;
+            
+            logs.insertBefore(entry, logs.firstChild);
+        }
+
+        // Auto check if already connected
+        if(window.ethereum && window.ethereum.selectedAddress) {
+           // Optional: Auto connect logic could go here
+        }
+    </script>
+</body>
+</html>
